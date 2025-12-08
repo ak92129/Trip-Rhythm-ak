@@ -1,20 +1,20 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, MapPin, Calendar, Clock, Battery, RefreshCw, Zap, Flame } from 'lucide-react';
+import { ArrowLeft, MapPin, Calendar, Clock, Battery, Zap, Flame } from 'lucide-react';
 import { getTripById, getItinerariesForTrip } from '../lib/db';
 import { adjustDaysWithMode, saveAdjustedDays } from '../lib/actions';
-import type { Trip, Itinerary, DayPlan, EffortLevel, AdjustmentComparison, AdjustmentMode, TravelLeg } from '../types';
+import type { Trip, Itinerary, DayPlan, EffortLevel, AdjustmentComparison, AdjustmentMode, TravelLeg, TravelItem, ItineraryItemType } from '../types';
 import toast from 'react-hot-toast';
 import { ComparisonModal } from '../components/ComparisonModal';
 import { CityChip } from '../components/CityChip';
-import { TravelLegCard } from '../components/TravelLegCard';
-import { calculateTravelLegs } from '../lib/travel';
+import { calculateTravelLegs, assignTravelLegsToDays, estimateTravelTime } from '../lib/travel';
+import { TravelItem as TravelItemComponent } from '../components/TravelItem';
 
 export function TripDetailPage() {
   const { tripId } = useParams<{ tripId: string }>();
   const [trip, setTrip] = useState<Trip | null>(null);
   const [itineraries, setItineraries] = useState<Itinerary[]>([]);
-  const [travelLegs, setTravelLegs] = useState<TravelLeg[]>([]);
+  const [mergedItineraries, setMergedItineraries] = useState<Array<Itinerary & { items: ItineraryItemType[] }>>([]);
   const [loading, setLoading] = useState(true);
   const [selectedDayIndex, setSelectedDayIndex] = useState<number | null>(null);
   const [adjusting, setAdjusting] = useState(false);
@@ -40,9 +40,67 @@ export function TripDetailPage() {
       setTrip(tripData);
       setItineraries(itineraryData);
 
+      // Merge travel legs into itineraries
       if (tripData?.cities && tripData.cities.length > 0) {
         const legs = calculateTravelLegs(tripData.cities, tripData.originCity);
-        setTravelLegs(legs);
+        const dayAssignments = assignTravelLegsToDays(legs, tripData.days);
+
+        const merged = itineraryData.map((itinerary) => {
+          const travelLegsForDay = dayAssignments.get(itinerary.day_index) || [];
+          const items: ItineraryItemType[] = [];
+
+          // Add travel items first (morning travel)
+          travelLegsForDay.forEach((leg) => {
+            const recommendedOption = leg.options.find((opt) => opt.isAllowed && opt.isRecommended);
+            const travelItem: TravelItem = {
+              type: 'travel',
+              fromCity: leg.fromCity,
+              toCity: leg.toCity,
+              mode: recommendedOption?.mode || 'flight',
+              distance: leg.distance,
+              duration: recommendedOption?.duration || 0,
+              options: leg.options,
+              isCrossContinental: leg.isCrossContinental,
+              restrictionType: leg.restrictionType,
+              restrictionReason: recommendedOption?.restrictionReason,
+            };
+            items.push(travelItem);
+          });
+
+          // Add activity items from the day plan
+          const dayPlan = itinerary.ai_plan_json;
+          if (dayPlan.activities && dayPlan.activities.length > 0) {
+            dayPlan.activities.forEach((activity) => {
+              items.push({
+                type: 'activity',
+                time: activity.time,
+                name: activity.name,
+                description: activity.description,
+                effortLevel: activity.effortLevel,
+              });
+            });
+          }
+
+          return {
+            ...itinerary,
+            items,
+          };
+        });
+
+        setMergedItineraries(merged);
+      } else {
+        // No travel, just convert activities to items
+        const merged = itineraryData.map((itinerary) => ({
+          ...itinerary,
+          items: (itinerary.ai_plan_json.activities || []).map((activity) => ({
+            type: 'activity' as const,
+            time: activity.time,
+            name: activity.name,
+            description: activity.description,
+            effortLevel: activity.effortLevel,
+          })),
+        }));
+        setMergedItineraries(merged);
       }
     } catch (error) {
       toast.error('Failed to load trip details');
@@ -183,19 +241,8 @@ export function TripDetailPage() {
         </div>
       </div>
 
-      {travelLegs.length > 0 && (
-        <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-6 mb-8 shadow-sm">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">Travel Between Cities</h2>
-          <div className="space-y-4">
-            {travelLegs.map((leg, index) => (
-              <TravelLegCard key={index} leg={leg} />
-            ))}
-          </div>
-        </div>
-      )}
-
       <div className="space-y-6">
-        {itineraries.map((itinerary) => (
+        {mergedItineraries.map((itinerary) => (
           <DayCard
             key={itinerary.id}
             itinerary={itinerary}
@@ -279,7 +326,7 @@ function DayCard({
   isSelected,
   onSelect,
 }: {
-  itinerary: Itinerary;
+  itinerary: Itinerary & { items: ItineraryItemType[] };
   isSelected: boolean;
   onSelect: () => void;
 }) {
@@ -315,9 +362,13 @@ function DayCard({
       <p className="text-gray-700 mb-6">{dayPlan.summary}</p>
 
       <div className="space-y-4">
-        {dayPlan.activities.map((activity, idx) => (
-          <ActivityCard key={idx} activity={activity} />
-        ))}
+        {itinerary.items.map((item, idx) => {
+          if (item.type === 'travel') {
+            return <TravelItemComponent key={idx} item={item} />;
+          } else {
+            return <ActivityCard key={idx} activity={item} />;
+          }
+        })}
       </div>
     </div>
   );

@@ -92,11 +92,14 @@ export interface AdjustmentComparison {
 }
 
 export type TravelMode = 'flight' | 'train' | 'car' | 'bus';
+export type RestrictionType = 'distance' | 'cross-continent' | null;
 
 export interface TravelModeOption {
   mode: TravelMode;
   duration: number;
   isRecommended: boolean;
+  isAllowed: boolean;
+  restrictionReason?: string;
 }
 
 export interface TravelLeg {
@@ -104,4 +107,53 @@ export interface TravelLeg {
   toCity: City;
   distance: number;
   options: TravelModeOption[];
+  isCrossContinental: boolean;
+  restrictionType: RestrictionType;
+  estimatedDepartureTime?: string;
+  estimatedArrivalTime?: string;
+}
+
+export interface TravelItem {
+  type: 'travel';
+  fromCity: City;
+  toCity: City;
+  mode: TravelMode;
+  distance: number;
+  duration: number;
+  options: TravelModeOption[];
+  isCrossContinental: boolean;
+  restrictionType: RestrictionType;
+  restrictionReason?: string;
+  estimatedDepartureTime?: string;
+  estimatedArrivalTime?: string;
+}
+
+export interface ActivityItem {
+  type: 'activity';
+  time: string;
+  name: string;
+  description: string;
+  effortLevel: EffortLevel;
+}
+
+export type ItineraryItemType = TravelItem | ActivityItem;
+
+export interface DayPlanV2 {
+  date: string;
+  summary: string;
+  items: ItineraryItemType[];
+  activities?: Activity[];
+}
+
+export interface Activity {
+  time: string;
+  name: string;
+  description: string;
+  effortLevel: EffortLevel;
+}
+
+export interface DayPlan {
+  date: string;
+  summary: string;
+  activities: Activity[];
 }
