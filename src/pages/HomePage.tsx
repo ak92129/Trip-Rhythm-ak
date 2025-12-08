@@ -126,7 +126,7 @@ export function HomePage() {
       clearInterval(interval);
       setShowUndoToast(false);
       setDeletedTripsBackup([]);
-      toast.success('Deletion finalized');
+      toast.success('Trips Deleted Successfully');
     }, UNDO_TIMEOUT_MS);
 
     setUndoTimer(timeout);
