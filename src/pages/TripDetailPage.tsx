@@ -189,7 +189,7 @@ export function TripDetailPage() {
             ) : (
               <>
                 <Battery className="w-5 h-5" />
-                This Day Feels Too Tiring
+                Feels Too Tiring
               </>
             )}
           </button>
