@@ -3,6 +3,25 @@ export type WalkingTolerance = 'low' | 'medium' | 'high';
 export type EffortLevel = 'low' | 'medium' | 'high';
 export type AdjustmentMode = 'reduce-fatigue' | 'increase-energy' | 'bring-it-on';
 
+export interface City {
+  id: string;
+  name: string;
+  country: string;
+  country_code: string | null;
+  latitude: number;
+  longitude: number;
+  created_at: string;
+}
+
+export interface TripCity {
+  id: string;
+  trip_id: string;
+  city_id: string;
+  order_index: number;
+  created_at: string;
+  city?: City;
+}
+
 export interface Trip {
   id: string;
   destination: string;
@@ -14,6 +33,7 @@ export interface Trip {
   sleep_time: string;
   must_see_places: string | null;
   created_at: string;
+  cities?: City[];
 }
 
 export interface Activity {
@@ -46,6 +66,13 @@ export interface TripFormData {
   wake_time: string;
   sleep_time: string;
   must_see_places: string;
+  cities?: Array<{
+    name: string;
+    country: string;
+    country_code?: string;
+    latitude: number;
+    longitude: number;
+  }>;
 }
 
 export interface AdjustmentComparison {

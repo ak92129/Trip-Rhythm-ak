@@ -84,6 +84,10 @@ function TripCard({ trip }: { trip: Trip }) {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
+  const displayDestination = trip.cities && trip.cities.length > 0
+    ? trip.cities.map(city => `${city.name}, ${city.country}`).join(' • ')
+    : trip.destination;
+
   return (
     <Link
       to={`/trip/${trip.id}`}
@@ -92,8 +96,8 @@ function TripCard({ trip }: { trip: Trip }) {
       <div className="p-6">
         <div className="flex items-start justify-between mb-3">
           <div className="flex items-center gap-2">
-            <MapPin className="w-5 h-5 text-sky-600" />
-            <h3 className="text-xl font-bold text-gray-900">{trip.destination}</h3>
+            <MapPin className="w-5 h-5 text-sky-600 flex-shrink-0" />
+            <h3 className="text-lg font-bold text-gray-900 line-clamp-2">{displayDestination}</h3>
           </div>
         </div>
 

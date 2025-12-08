@@ -3,11 +3,14 @@ import { useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, Sparkles } from 'lucide-react';
 import { generateItinerary } from '../lib/actions';
 import type { TripFormData, TravelStyle, WalkingTolerance } from '../types';
+import { parseCityInput, geocodeCities } from '../lib/geocoding';
+import { CityChip } from '../components/CityChip';
 import toast from 'react-hot-toast';
 
 export function NewTripPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const [geocoding, setGeocoding] = useState(false);
   const [formData, setFormData] = useState<TripFormData>({
     destination: '',
     start_date: '',
@@ -17,6 +20,7 @@ export function NewTripPage() {
     wake_time: '08:00',
     sleep_time: '22:00',
     must_see_places: '',
+    cities: [],
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -24,6 +28,11 @@ export function NewTripPage() {
 
     if (!formData.destination || !formData.start_date) {
       toast.error('Please fill in all required fields');
+      return;
+    }
+
+    if (!formData.cities || formData.cities.length === 0) {
+      toast.error('Please add at least one city');
       return;
     }
 
@@ -51,6 +60,51 @@ export function NewTripPage() {
     }));
   };
 
+  const handleCityInputBlur = async () => {
+    const cityNames = parseCityInput(formData.destination);
+    if (cityNames.length === 0) {
+      setFormData((prev) => ({ ...prev, cities: [] }));
+      return;
+    }
+
+    setGeocoding(true);
+    try {
+      const geocodedCities = await geocodeCities(cityNames);
+
+      if (geocodedCities.length === 0) {
+        toast.error('Could not find any of the cities entered');
+        setFormData((prev) => ({ ...prev, cities: [] }));
+      } else if (geocodedCities.length < cityNames.length) {
+        toast.error(`Found ${geocodedCities.length} of ${cityNames.length} cities`);
+        setFormData((prev) => ({ ...prev, cities: geocodedCities }));
+      } else {
+        setFormData((prev) => ({ ...prev, cities: geocodedCities }));
+      }
+    } catch (error) {
+      toast.error('Failed to geocode cities');
+      console.error(error);
+    } finally {
+      setGeocoding(false);
+    }
+  };
+
+  const handleRemoveCity = (index: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      cities: prev.cities?.filter((_, i) => i !== index) || [],
+    }));
+
+    const remainingCityNames = (formData.cities || [])
+      .filter((_, i) => i !== index)
+      .map((city) => city.name)
+      .join(', ');
+
+    setFormData((prev) => ({
+      ...prev,
+      destination: remainingCityNames,
+    }));
+  };
+
   return (
     <div className="max-w-3xl mx-auto">
       <Link
@@ -72,7 +126,7 @@ export function NewTripPage() {
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
             <label htmlFor="destination" className="block text-sm font-medium text-gray-700 mb-2">
-              Destination City *
+              Destination Cities *
             </label>
             <input
               type="text"
@@ -80,10 +134,30 @@ export function NewTripPage() {
               name="destination"
               value={formData.destination}
               onChange={handleChange}
-              placeholder="e.g., Paris, France"
+              onBlur={handleCityInputBlur}
+              placeholder="e.g., Paris, London, Berlin (comma-separated)"
               required
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-transparent"
+              disabled={geocoding}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
             />
+            {geocoding && (
+              <p className="text-sm text-gray-600 mt-2">
+                <span className="inline-block animate-spin mr-2">⟳</span>
+                Finding cities...
+              </p>
+            )}
+            {formData.cities && formData.cities.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-3">
+                {formData.cities.map((city, index) => (
+                  <CityChip
+                    key={index}
+                    city={city.name}
+                    country={city.country}
+                    onRemove={() => handleRemoveCity(index)}
+                  />
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

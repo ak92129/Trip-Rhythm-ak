@@ -6,6 +6,7 @@ import { adjustDaysWithMode, saveAdjustedDays } from '../lib/actions';
 import type { Trip, Itinerary, DayPlan, EffortLevel, AdjustmentComparison, AdjustmentMode } from '../types';
 import toast from 'react-hot-toast';
 import { ComparisonModal } from '../components/ComparisonModal';
+import { CityChip } from '../components/CityChip';
 
 export function TripDetailPage() {
   const { tripId } = useParams<{ tripId: string }>();
@@ -123,11 +124,22 @@ export function TripDetailPage() {
 
       <div className="bg-white rounded-xl shadow-md p-8 mb-8">
         <div className="flex items-start justify-between mb-6">
-          <div>
-            <div className="flex items-center gap-3 mb-2">
+          <div className="w-full">
+            <div className="flex items-center gap-3 mb-3">
               <MapPin className="w-6 h-6 text-sky-600" />
-              <h1 className="text-3xl font-bold text-gray-900">{trip.destination}</h1>
+              <h1 className="text-3xl font-bold text-gray-900">
+                {trip.cities && trip.cities.length > 0
+                  ? trip.cities.map(city => city.name).join(', ')
+                  : trip.destination}
+              </h1>
             </div>
+            {trip.cities && trip.cities.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-4 ml-9">
+                {trip.cities.map((city, index) => (
+                  <CityChip key={index} city={city.name} country={city.country} />
+                ))}
+              </div>
+            )}
             <div className="flex items-center gap-2 text-gray-600 mb-4">
               <Calendar className="w-4 h-4" />
               <span>

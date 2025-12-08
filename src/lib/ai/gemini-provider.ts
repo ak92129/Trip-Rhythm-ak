@@ -86,16 +86,24 @@ export class GeminiProvider implements AIProvider {
   private buildGeneratePrompt(tripData: TripFormData): string {
     const startDate = new Date(tripData.start_date);
 
-    return `Generate a ${tripData.days}-day travel itinerary for ${tripData.destination}.
+    const destinationInfo = tripData.cities && tripData.cities.length > 0
+      ? tripData.cities.map(city => `${city.name}, ${city.country} (${city.latitude}, ${city.longitude})`).join(' → ')
+      : tripData.destination;
+
+    const citiesNote = tripData.cities && tripData.cities.length > 1
+      ? `\n- Multi-City Trip: The itinerary should flow across these cities in order: ${tripData.cities.map(c => `${c.name}, ${c.country}`).join(' → ')}`
+      : '';
+
+    return `Generate a ${tripData.days}-day travel itinerary for ${destinationInfo}.
 
 Trip Details:
-- Destination: ${tripData.destination}
+- Destination: ${destinationInfo}
 - Start Date: ${tripData.start_date}
 - Number of Days: ${tripData.days}
 - Travel Style: ${tripData.travel_style} (chill = relaxed pace with downtime; balanced = moderate sightseeing with breaks; intense = packed schedule)
 - Walking Tolerance: ${tripData.walking_tolerance} (low = minimal walking, use transport; medium = moderate walking with breaks; high = comfortable with long walks)
 - Wake Time: ${tripData.wake_time}
-- Sleep Time: ${tripData.sleep_time}
+- Sleep Time: ${tripData.sleep_time}${citiesNote}
 ${tripData.must_see_places ? `- Must-See Places: ${tripData.must_see_places}` : ''}
 
 Requirements:
