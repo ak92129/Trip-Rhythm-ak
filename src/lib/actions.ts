@@ -117,6 +117,69 @@ export async function adjustDaysWithMode(
   }
 }
 
+export async function adjustDaysWithModeAndScope(
+  tripId: string,
+  dayIndex: number,
+  mode: AdjustmentMode,
+  scope: 'single-day' | 'from-day-onward' = 'from-day-onward'
+): Promise<AdjustmentComparison> {
+  try {
+    const trip = await getTripById(tripId);
+    if (!trip) {
+      throw new Error('Trip not found');
+    }
+
+    const itineraries = await getItinerariesForTrip(tripId);
+    const allDays = itineraries.map((itin) => itin.ai_plan_json);
+
+    const tripContext: TripFormData = {
+      destination: trip.destination,
+      start_date: trip.start_date,
+      days: trip.days,
+      travel_style: trip.travel_style,
+      walking_tolerance: trip.walking_tolerance,
+      wake_time: trip.wake_time,
+      sleep_time: trip.sleep_time,
+      must_see_places: trip.must_see_places || '',
+    };
+
+    const aiProvider = getAIProvider();
+
+    if (scope === 'single-day') {
+      const currentDay = allDays[dayIndex - 1];
+      if (!currentDay) {
+        throw new Error('Day not found');
+      }
+
+      const adjustment = await aiProvider.adjustDaysWithMode(
+        dayIndex,
+        [currentDay],
+        tripContext,
+        mode
+      );
+
+      return {
+        originalDays: [currentDay],
+        adjustedDays: adjustment.adjustedDays,
+        startDayIndex: dayIndex,
+        mode,
+      };
+    } else {
+      const adjustment = await aiProvider.adjustDaysWithMode(
+        dayIndex,
+        allDays,
+        tripContext,
+        mode
+      );
+
+      return adjustment;
+    }
+  } catch (error) {
+    console.error('Error adjusting days with scope:', error);
+    throw new Error(error instanceof Error ? error.message : 'Failed to adjust days');
+  }
+}
+
 export async function saveAdjustedDays(
   tripId: string,
   startDayIndex: number,

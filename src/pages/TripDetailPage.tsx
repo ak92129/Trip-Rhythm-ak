@@ -2,13 +2,64 @@ import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, MapPin, Calendar, Clock, Battery, Zap, Flame } from 'lucide-react';
 import { getTripById, getItinerariesForTrip } from '../lib/db';
-import { adjustDaysWithMode, saveAdjustedDays } from '../lib/actions';
+import { adjustDaysWithModeAndScope, saveAdjustedDays } from '../lib/actions';
 import type { Trip, Itinerary, DayPlan, EffortLevel, AdjustmentComparison, AdjustmentMode, TravelLeg, TravelItem, ItineraryItemType } from '../types';
 import toast from 'react-hot-toast';
 import { ComparisonModal } from '../components/ComparisonModal';
 import { CityChip } from '../components/CityChip';
+import { EnergyScopeDialog } from '../components/EnergyScopeDialog';
+import { EnergyScopeInstructions } from '../components/EnergyScopeInstructions';
 import { calculateTravelLegs, assignTravelLegsToDays, estimateTravelTime } from '../lib/travel';
 import { TravelItem as TravelItemComponent } from '../components/TravelItem';
+
+function organizeItemsByCity(
+  activityItems: ItineraryItemType[],
+  travelItems: TravelItem[]
+): ItineraryItemType[] {
+  // If no travel items, just return activities
+  if (travelItems.length === 0) {
+    return activityItems;
+  }
+
+  // Build result by placing travel items before first activity in destination city
+  const result: ItineraryItemType[] = [];
+  const processedActivities = new Set<number>();
+
+  // For each travel item, find and place it before the first activity in destination city
+  travelItems.forEach((travelItem) => {
+    // Find activities that belong to this travel's destination city
+    // For simplicity, we assume activities are ordered and after a travel leg, the next unprocessed
+    // activity belongs to the destination city
+    const firstUnprocessedActivityIndex = activityItems.findIndex(
+      (_, index) => !processedActivities.has(index)
+    );
+
+    if (firstUnprocessedActivityIndex !== -1) {
+      // Add all activities before this position
+      for (let i = 0; i < firstUnprocessedActivityIndex; i++) {
+        if (!processedActivities.has(i)) {
+          result.push(activityItems[i]);
+          processedActivities.add(i);
+        }
+      }
+      // Add the travel item
+      result.push(travelItem);
+      // Mark the first unprocessed activity to process next time
+    } else {
+      // No more activities, just add travel items at the end
+      result.push(travelItem);
+    }
+  });
+
+  // Add remaining activities
+  activityItems.forEach((activity, index) => {
+    if (!processedActivities.has(index)) {
+      result.push(activity);
+    }
+  });
+
+  return result;
+}
 
 export function TripDetailPage() {
   const { tripId } = useParams<{ tripId: string }>();
@@ -21,6 +72,8 @@ export function TripDetailPage() {
   const [adjustingMode, setAdjustingMode] = useState<AdjustmentMode | null>(null);
   const [showComparison, setShowComparison] = useState(false);
   const [comparison, setComparison] = useState<AdjustmentComparison | null>(null);
+  const [showEnergyScope, setShowEnergyScope] = useState(false);
+  const [pendingEnergyMode, setPendingEnergyMode] = useState<AdjustmentMode | null>(null);
 
   useEffect(() => {
     if (tripId) {
@@ -40,19 +93,29 @@ export function TripDetailPage() {
       setTrip(tripData);
       setItineraries(itineraryData);
 
-      // Merge travel legs into itineraries
+      // Merge travel legs into itineraries with proper travel line positioning
       if (tripData?.cities && tripData.cities.length > 0) {
         const legs = calculateTravelLegs(tripData.cities, tripData.originCity);
         const dayAssignments = assignTravelLegsToDays(legs, tripData.days);
 
         const merged = itineraryData.map((itinerary) => {
           const travelLegsForDay = dayAssignments.get(itinerary.day_index) || [];
-          const items: ItineraryItemType[] = [];
+          const dayPlan = itinerary.ai_plan_json;
+          const activities = dayPlan.activities || [];
 
-          // Add travel items first (morning travel)
-          travelLegsForDay.forEach((leg) => {
+          // Convert activities to activity items
+          const activityItems: ItineraryItemType[] = activities.map((activity) => ({
+            type: 'activity' as const,
+            time: activity.time,
+            name: activity.name,
+            description: activity.description,
+            effortLevel: activity.effortLevel,
+          }));
+
+          // Convert travel legs to travel items
+          const travelItems: TravelItem[] = travelLegsForDay.map((leg) => {
             const recommendedOption = leg.options.find((opt) => opt.isAllowed && opt.isRecommended);
-            const travelItem: TravelItem = {
+            return {
               type: 'travel',
               fromCity: leg.fromCity,
               toCity: leg.toCity,
@@ -64,22 +127,10 @@ export function TripDetailPage() {
               restrictionType: leg.restrictionType,
               restrictionReason: recommendedOption?.restrictionReason,
             };
-            items.push(travelItem);
           });
 
-          // Add activity items from the day plan
-          const dayPlan = itinerary.ai_plan_json;
-          if (dayPlan.activities && dayPlan.activities.length > 0) {
-            dayPlan.activities.forEach((activity) => {
-              items.push({
-                type: 'activity',
-                time: activity.time,
-                name: activity.name,
-                description: activity.description,
-                effortLevel: activity.effortLevel,
-              });
-            });
-          }
+          // Merge items with travel lines positioned before first activity in destination city
+          const items = organizeItemsByCity(activityItems, travelItems);
 
           return {
             ...itinerary,
@@ -110,14 +161,27 @@ export function TripDetailPage() {
     }
   }
 
-  async function handleAdjustDay(mode: AdjustmentMode) {
-    if (!tripId || selectedDayIndex === null) return;
+  function handleAdjustDay(mode: AdjustmentMode) {
+    if (selectedDayIndex === null) return;
 
+    setPendingEnergyMode(mode);
+    setShowEnergyScope(true);
+  }
+
+  async function handleScopeConfirmed(scope: 'single-day' | 'from-day-onward') {
+    if (!tripId || selectedDayIndex === null || !pendingEnergyMode) return;
+
+    setShowEnergyScope(false);
     setAdjusting(true);
-    setAdjustingMode(mode);
+    setAdjustingMode(pendingEnergyMode);
 
     try {
-      const result = await adjustDaysWithMode(tripId, selectedDayIndex, mode);
+      const result = await adjustDaysWithModeAndScope(
+        tripId,
+        selectedDayIndex,
+        pendingEnergyMode,
+        scope
+      );
       setComparison(result);
       setShowComparison(true);
     } catch (error) {
@@ -126,6 +190,7 @@ export function TripDetailPage() {
     } finally {
       setAdjusting(false);
       setAdjustingMode(null);
+      setPendingEnergyMode(null);
     }
   }
 
@@ -137,13 +202,59 @@ export function TripDetailPage() {
       await loadTripData();
       setShowComparison(false);
       setComparison(null);
-      setSelectedDayIndex(null);
+
       const daysCount = comparison.adjustedDays.length;
-      toast.success(`${daysCount} ${daysCount === 1 ? 'day' : 'days'} updated successfully!`);
+      const scope = daysCount === 1 ? 'single-day' : 'from-day-onward';
+      const selectedItinerary = mergedItineraries.find(
+        (i) => i.day_index === comparison.startDayIndex
+      );
+      const selectedDate = selectedItinerary
+        ? new Date(selectedItinerary.ai_plan_json.date).toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+          })
+        : '';
+
+      if (scope === 'single-day') {
+        toast.success(`Updated energy and activities for ${selectedDate} only.`);
+      } else {
+        toast.success(
+          `Updated energy and activities from ${selectedDate} to the end of your trip.`
+        );
+      }
+
+      setSelectedDayIndex(null);
     } catch (error) {
       toast.error('Failed to save changes');
       console.error(error);
     }
+  }
+
+  function getSelectedDayInfo() {
+    if (selectedDayIndex === null) return { date: '', city: '' };
+
+    const selectedItinerary = mergedItineraries.find(
+      (i) => i.day_index === selectedDayIndex
+    );
+    if (!selectedItinerary) return { date: '', city: '' };
+
+    const date = new Date(selectedItinerary.ai_plan_json.date);
+    const formattedDate = date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+    });
+
+    let cityName = '';
+    if (trip?.cities && trip.cities.length > 0) {
+      const cityIndex = selectedDayIndex - 1;
+      if (cityIndex < trip.cities.length) {
+        cityName = trip.cities[cityIndex].name;
+      } else {
+        cityName = trip.cities[trip.cities.length - 1].name;
+      }
+    }
+
+    return { date: formattedDate, city: cityName };
   }
 
   function handleCancelChanges() {
@@ -241,19 +352,46 @@ export function TripDetailPage() {
         </div>
       </div>
 
+      <EnergyScopeInstructions />
+
       <div className="space-y-6">
-        {mergedItineraries.map((itinerary) => (
-          <DayCard
-            key={itinerary.id}
-            itinerary={itinerary}
-            isSelected={selectedDayIndex === itinerary.day_index}
-            onSelect={() => setSelectedDayIndex(itinerary.day_index)}
-          />
-        ))}
+        {mergedItineraries.map((itinerary) => {
+          let cityName: string | undefined;
+          if (trip?.cities && trip.cities.length > 0) {
+            const cityIndex = itinerary.day_index - 1;
+            if (cityIndex < trip.cities.length) {
+              cityName = trip.cities[cityIndex].name;
+            } else {
+              cityName = trip.cities[trip.cities.length - 1].name;
+            }
+          }
+
+          return (
+            <DayCard
+              key={itinerary.id}
+              itinerary={itinerary}
+              isSelected={selectedDayIndex === itinerary.day_index}
+              onSelect={() => setSelectedDayIndex(itinerary.day_index)}
+              cityName={cityName}
+            />
+          );
+        })}
       </div>
 
       {selectedDayIndex !== null && (
         <div className="fixed bottom-6 right-6 flex flex-col gap-3">
+          {(() => {
+            const { date, city } = getSelectedDayInfo();
+            return (
+              <div className="bg-white rounded-lg shadow-lg p-4 border border-gray-200">
+                <div className="text-xs text-gray-600 font-medium">Adjust energy for:</div>
+                <div className="text-sm font-semibold text-gray-900">
+                  {date && city ? `${date} – ${city}` : 'Selected day'}
+                </div>
+              </div>
+            );
+          })()}
+
           <button
             onClick={() => handleAdjustDay('reduce-fatigue')}
             disabled={adjusting}
@@ -317,6 +455,22 @@ export function TripDetailPage() {
           onCancel={handleCancelChanges}
         />
       )}
+
+      {(() => {
+        const { date, city } = getSelectedDayInfo();
+        return (
+          <EnergyScopeDialog
+            isOpen={showEnergyScope}
+            onClose={() => {
+              setShowEnergyScope(false);
+              setPendingEnergyMode(null);
+            }}
+            onConfirm={handleScopeConfirmed}
+            dateLabel={date}
+            cityLabel={city}
+          />
+        );
+      })()}
     </div>
   );
 }
@@ -325,10 +479,12 @@ function DayCard({
   itinerary,
   isSelected,
   onSelect,
+  cityName,
 }: {
   itinerary: Itinerary & { items: ItineraryItemType[] };
   isSelected: boolean;
   onSelect: () => void;
+  cityName?: string;
 }) {
   const dayPlan = itinerary.ai_plan_json;
   const date = new Date(dayPlan.date);
@@ -351,6 +507,7 @@ function DayCard({
             Day {itinerary.day_index}
           </h3>
           <p className="text-sm text-gray-600">{formattedDate}</p>
+          {cityName && <p className="text-xs text-sky-600 font-medium mt-1">{cityName}</p>}
         </div>
         {isSelected && (
           <span className="px-3 py-1 bg-amber-100 text-amber-800 text-sm font-medium rounded-full">
