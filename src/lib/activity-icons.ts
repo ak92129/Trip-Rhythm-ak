@@ -248,6 +248,35 @@ export function getActivityIcons(activityName: string, description: string): Act
     };
   }
 
+  if (combined.includes('museum')) {
+    const hasVisit = lowerName.includes('visit') || lowerName.includes('explore') || lowerName.includes('tour');
+    if (hasVisit) {
+      return {
+        icons: [Footprints, Building],
+        color: 'bg-purple-100 text-purple-600',
+      };
+    }
+    return {
+      icons: [Building],
+      color: 'bg-purple-100 text-purple-600',
+    };
+  }
+
+  if (lowerName.includes('acropolis') || lowerName.includes('parthenon') || lowerName.includes('colosseum') ||
+      lowerName.includes('pantheon') || lowerName.includes('temple') || lowerName.includes('ruins')) {
+    const hasVisit = lowerName.includes('visit') || lowerName.includes('explore') || lowerName.includes('tour');
+    if (hasVisit) {
+      return {
+        icons: [Footprints, Landmark],
+        color: 'bg-amber-100 text-amber-600',
+      };
+    }
+    return {
+      icons: [Landmark],
+      color: 'bg-amber-100 text-amber-600',
+    };
+  }
+
   if (lowerName.includes('lunch') || lowerName.includes('dinner') || lowerName.includes('breakfast')) {
     const hasLocation = lowerName.includes(' at ') || lowerName.includes(' in ') || lowerName.includes(' near ');
     if (hasLocation) {
