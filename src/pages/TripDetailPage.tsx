@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, MapPin, Calendar, Clock, Battery, Zap, Flame, Sun, Cloud, CloudRain, Snowflake, CloudDrizzle, CloudSun, CloudFog, CloudLightning } from 'lucide-react';
 import { getTripById, getItinerariesForTrip } from '../lib/db';
 import { adjustDaysWithModeAndScope, saveAdjustedDays } from '../lib/actions';
-import type { Trip, Itinerary, DayPlan, EffortLevel, AdjustmentComparison, AdjustmentMode, TravelLeg, TravelItem, ItineraryItemType, WeatherData, DayWeather } from '../types';
+import type { Trip, Itinerary, DayPlan, EffortLevel, AdjustmentComparison, AdjustmentMode, ItineraryItemType, WeatherData, DayWeather } from '../types';
 import toast from 'react-hot-toast';
 import { ComparisonModal } from '../components/ComparisonModal';
 import { CityChip } from '../components/CityChip';
@@ -11,8 +11,6 @@ import { EnergyScopeDialog } from '../components/EnergyScopeDialog';
 import { EnergyScopeInstructions } from '../components/EnergyScopeInstructions';
 import { WeatherSuggestionsCard } from '../components/WeatherSuggestionsCard';
 import { PackingListSummary } from '../components/PackingListSummary';
-import { calculateTravelLegs, assignTravelLegsToDays, estimateTravelTime } from '../lib/travel';
-import { TravelItem as TravelItemComponent } from '../components/TravelItem';
 import { fetchDailyWeather, enrichWeatherWithMetadata } from '../lib/weather';
 import { WikipediaModal } from '../components/WikipediaModal';
 import { RestaurantModal } from '../components/RestaurantModal';
@@ -39,36 +37,6 @@ function getWeatherIconComponent(iconName: string) {
     default:
       return Cloud;
   }
-}
-
-function organizeItemsByCity(
-  activityItems: ItineraryItemType[],
-  travelItems: TravelItem[]
-): ItineraryItemType[] {
-  // If no travel items, just return activities
-  if (travelItems.length === 0) {
-    return activityItems;
-  }
-
-  // If no activities, just return travel items
-  if (activityItems.length === 0) {
-    return travelItems;
-  }
-
-  // For a single day with both travel and activities, place travel before first activity
-  if (travelItems.length === 1 && activityItems.length > 0) {
-    return [travelItems[0], ...activityItems];
-  }
-
-  // Multiple travel items on same day: place them chronologically
-  // Typically, all travel items on a day should go before activities
-  const result: ItineraryItemType[] = [];
-
-  // Group items with proper ordering: travel first, then activities
-  result.push(...travelItems);
-  result.push(...activityItems);
-
-  return result;
 }
 
 export function TripDetailPage() {
@@ -114,66 +82,17 @@ export function TripDetailPage() {
         loadWeatherData(tripData);
       }
 
-      // Merge travel legs into itineraries with proper travel line positioning
-      if (tripData?.cities && tripData.cities.length > 0) {
-        const legs = calculateTravelLegs(tripData.cities, tripData.originCity);
-        const dayAssignments = assignTravelLegsToDays(legs, tripData.days);
-
-        const merged = itineraryData.map((itinerary) => {
-          const travelLegsForDay = dayAssignments.get(itinerary.day_index) || [];
-          const dayPlan = itinerary.ai_plan_json;
-          const activities = dayPlan.activities || [];
-
-          // Convert activities to activity items
-          const activityItems: ItineraryItemType[] = activities.map((activity) => ({
-            type: 'activity' as const,
-            time: activity.time,
-            name: activity.name,
-            description: activity.description,
-            effortLevel: activity.effortLevel,
-          }));
-
-          // Convert travel legs to travel items
-          const travelItems: TravelItem[] = travelLegsForDay.map((leg) => {
-            const recommendedOption = leg.options.find((opt) => opt.isAllowed && opt.isRecommended);
-            return {
-              type: 'travel',
-              fromCity: leg.fromCity,
-              toCity: leg.toCity,
-              mode: recommendedOption?.mode || 'flight',
-              distance: leg.distance,
-              duration: recommendedOption?.duration || 0,
-              options: leg.options,
-              isCrossContinental: leg.isCrossContinental,
-              restrictionType: leg.restrictionType,
-              restrictionReason: recommendedOption?.restrictionReason,
-            };
-          });
-
-          // Merge items with travel lines positioned before first activity in destination city
-          const items = organizeItemsByCity(activityItems, travelItems);
-
-          return {
-            ...itinerary,
-            items,
-          };
-        });
-
-        setMergedItineraries(merged);
-      } else {
-        // No travel, just convert activities to items
-        const merged = itineraryData.map((itinerary) => ({
-          ...itinerary,
-          items: (itinerary.ai_plan_json.activities || []).map((activity) => ({
-            type: 'activity' as const,
-            time: activity.time,
-            name: activity.name,
-            description: activity.description,
-            effortLevel: activity.effortLevel,
-          })),
-        }));
-        setMergedItineraries(merged);
-      }
+      const merged = itineraryData.map((itinerary) => ({
+        ...itinerary,
+        items: (itinerary.ai_plan_json.activities || []).map((activity) => ({
+          type: 'activity' as const,
+          time: activity.time,
+          name: activity.name,
+          description: activity.description,
+          effortLevel: activity.effortLevel,
+        })),
+      }));
+      setMergedItineraries(merged);
     } catch (error) {
       toast.error('Failed to load trip details');
       console.error(error);
@@ -640,13 +559,9 @@ function DayCard({
       <p className="text-gray-700 mb-6">{dayPlan.summary}</p>
 
       <div className="space-y-4">
-        {itinerary.items.map((item, idx) => {
-          if (item.type === 'travel') {
-            return <TravelItemComponent key={idx} item={item} />;
-          } else {
-            return <ActivityCard key={idx} activity={item} onPlaceClick={onPlaceClick} />;
-          }
-        })}
+        {itinerary.items.map((item, idx) => (
+          <ActivityCard key={idx} activity={item} onPlaceClick={onPlaceClick} />
+        ))}
       </div>
     </div>
   );
