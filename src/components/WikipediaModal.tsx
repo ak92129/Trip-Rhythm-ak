@@ -40,11 +40,11 @@ export function WikipediaModal({ isOpen, title, onClose }: WikipediaModalProps) 
         explaintext: 'true',
         inprop: 'url',
         piprop: 'original',
+        origin: '*',
       });
 
       const response = await fetch(
-        `https://en.wikipedia.org/w/api.php?${searchParams.toString()}`,
-        { headers: { 'Api-User-Agent': 'TravelPlanner/1.0' } }
+        `https://en.wikipedia.org/w/api.php?${searchParams.toString()}`
       );
 
       if (!response.ok) throw new Error('Failed to fetch Wikipedia');
