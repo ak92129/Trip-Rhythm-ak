@@ -148,8 +148,9 @@ export function WikipediaModal({ isOpen, title, onClose }: WikipediaModalProps) 
         format: 'json',
         titles: bestMatch,
         prop: 'extracts|pageimages|info',
-        exintro: 'true',
+        exintro: 'false',
         explaintext: 'true',
+        exsentences: '10',
         inprop: 'url',
         piprop: 'original',
         origin: '*',
@@ -172,9 +173,15 @@ export function WikipediaModal({ isOpen, title, onClose }: WikipediaModalProps) 
       const pageData = pages[pageKey];
       const wikiUrl = pageData.canonicalurl || `https://en.wikipedia.org/wiki/${encodeURIComponent(bestMatch)}`;
 
+      const extract = pageData.extract?.trim() || '';
+
+      if (!extract || extract.length < 50) {
+        return null;
+      }
+
       return {
         title: pageData.title,
-        content: pageData.extract || 'No content available',
+        content: extract,
         url: wikiUrl,
         image: pageData.original?.source,
       };
