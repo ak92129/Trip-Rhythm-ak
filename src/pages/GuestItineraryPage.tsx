@@ -284,9 +284,9 @@ export function GuestItineraryPage() {
                 {formData.cities.map((city, index) => (
                   <CityChip
                     key={index}
-                    city={city}
+                    city={city.name}
+                    country={city.country}
                     onRemove={() => handleRemoveCity(index)}
-                    disabled={loading || hasGenerated}
                   />
                 ))}
               </div>
