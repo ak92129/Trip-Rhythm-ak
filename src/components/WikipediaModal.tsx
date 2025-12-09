@@ -25,16 +25,50 @@ export function WikipediaModal({ isOpen, title, onClose }: WikipediaModalProps) 
     }
   }, [isOpen, title]);
 
+  function cleanPlaceName(rawTitle: string): string {
+    let cleaned = rawTitle;
+
+    const actionPrefixes = [
+      'visit ',
+      'explore ',
+      'tour ',
+      'see ',
+      'check out ',
+      'discover ',
+      'experience ',
+      'walk through ',
+      'walk to ',
+      'walk ',
+      'stroll through ',
+      'stroll to ',
+      'stroll ',
+    ];
+
+    const lowerTitle = cleaned.toLowerCase();
+    for (const prefix of actionPrefixes) {
+      if (lowerTitle.startsWith(prefix)) {
+        cleaned = cleaned.substring(prefix.length);
+        break;
+      }
+    }
+
+    cleaned = cleaned.replace(/^the\s+/i, '');
+
+    return cleaned.trim();
+  }
+
   async function fetchWikipediaContent(searchTitle: string) {
     setLoading(true);
     setError(null);
     setPage(null);
 
+    const cleanedTitle = cleanPlaceName(searchTitle);
+
     try {
       const searchParams = new URLSearchParams({
         action: 'query',
         format: 'json',
-        titles: searchTitle,
+        titles: cleanedTitle,
         prop: 'extracts|pageimages|info',
         exintro: 'true',
         explaintext: 'true',
@@ -54,12 +88,12 @@ export function WikipediaModal({ isOpen, title, onClose }: WikipediaModalProps) 
       const pageKey = Object.keys(pages)[0];
 
       if (!pageKey || pageKey === '-1') {
-        setError(`No Wikipedia page found for "${searchTitle}"`);
+        setError(`No Wikipedia page found for "${cleanedTitle}"`);
         return;
       }
 
       const pageData = pages[pageKey];
-      const wikiUrl = pageData.canonicalurl || `https://en.wikipedia.org/wiki/${encodeURIComponent(searchTitle)}`;
+      const wikiUrl = pageData.canonicalurl || `https://en.wikipedia.org/wiki/${encodeURIComponent(cleanedTitle)}`;
 
       setPage({
         title: pageData.title,
