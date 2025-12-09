@@ -111,7 +111,7 @@ export function WikipediaModal({ isOpen, title, onClose }: WikipediaModalProps) 
       action: 'opensearch',
       format: 'json',
       search: query,
-      limit: '1',
+      limit: '5',
       origin: '*',
     });
 
@@ -126,6 +126,26 @@ export function WikipediaModal({ isOpen, title, onClose }: WikipediaModalProps) 
       return data[1][0];
     }
 
+    const prefixParams = new URLSearchParams({
+      action: 'query',
+      format: 'json',
+      list: 'prefixsearch',
+      pssearch: query,
+      pslimit: '5',
+      origin: '*',
+    });
+
+    const prefixResponse = await fetch(
+      `https://en.wikipedia.org/w/api.php?${prefixParams.toString()}`
+    );
+
+    if (!prefixResponse.ok) return null;
+
+    const prefixData = await prefixResponse.json();
+    if (prefixData?.query?.prefixsearch && prefixData.query.prefixsearch.length > 0) {
+      return prefixData.query.prefixsearch[0].title;
+    }
+
     return null;
   }
 
@@ -137,10 +157,25 @@ export function WikipediaModal({ isOpen, title, onClose }: WikipediaModalProps) 
 
   async function fetchSinglePage(placeName: string): Promise<WikiPage | null> {
     try {
-      const bestMatch = await searchWikipedia(placeName);
+      let bestMatch = await searchWikipedia(placeName);
 
       if (!bestMatch) {
-        return null;
+        const variations = [
+          placeName.replace(/i/gi, 'y'),
+          placeName.replace(/y/gi, 'i'),
+          placeName.replace(/ps/gi, 'Ps'),
+        ];
+
+        for (const variation of variations) {
+          if (variation !== placeName) {
+            bestMatch = await searchWikipedia(variation);
+            if (bestMatch) break;
+          }
+        }
+
+        if (!bestMatch) {
+          return null;
+        }
       }
 
       const searchParams = new URLSearchParams({
