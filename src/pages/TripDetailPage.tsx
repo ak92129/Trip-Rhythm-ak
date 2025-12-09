@@ -15,7 +15,7 @@ import { calculateTravelLegs, assignTravelLegsToDays, estimateTravelTime } from 
 import { TravelItem as TravelItemComponent } from '../components/TravelItem';
 import { fetchDailyWeather, enrichWeatherWithMetadata } from '../lib/weather';
 import { WikipediaModal } from '../components/WikipediaModal';
-import { detectActivityType, getActivityIcon, getActivityColor, isPlaceName } from '../lib/activity-icons';
+import { getActivityIcons, isPlaceName } from '../lib/activity-icons';
 
 function getWeatherIconComponent(iconName: string) {
   switch (iconName) {
@@ -665,16 +665,25 @@ function ActivityCard({
     high: 'bg-red-100 text-red-800 border-red-200',
   };
 
-  const activityType = detectActivityType(activity.name, activity.description);
-  const Icon = getActivityIcon(activityType);
-  const colorClass = getActivityColor(activityType);
+  const { icons, color: colorClass } = getActivityIcons(activity.name, activity.description);
   const isPlace = isPlaceName(activity.name);
 
   return (
     <div className="flex gap-4 p-4 bg-gray-50 rounded-lg">
       <div className="flex-shrink-0">
-        <div className={`w-16 h-16 ${colorClass} rounded-lg flex items-center justify-center`}>
-          <Icon className="w-6 h-6" />
+        <div className={`w-16 h-16 ${colorClass} rounded-lg flex items-center justify-center relative`}>
+          {icons.length === 1 ? (
+            (() => {
+              const Icon = icons[0];
+              return <Icon className="w-6 h-6" />;
+            })()
+          ) : (
+            <div className="flex flex-col gap-0.5">
+              {icons.map((Icon, idx) => (
+                <Icon key={idx} className="w-5 h-5" />
+              ))}
+            </div>
+          )}
         </div>
       </div>
 

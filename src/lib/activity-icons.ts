@@ -12,6 +12,10 @@ import {
   Compass,
   ShoppingBag,
   Music,
+  Plane,
+  Gift,
+  Coffee,
+  Footprints,
   LucideIcon,
 } from 'lucide-react';
 
@@ -208,6 +212,8 @@ export function isPlaceName(activityName: string): boolean {
     'pier',
     'fountain',
     'statue',
+    'line',
+    'market',
   ];
 
   const lowerName = activityName.toLowerCase();
@@ -216,4 +222,85 @@ export function isPlaceName(activityName: string): boolean {
     placePrefixes.some((prefix) => lowerName.startsWith(prefix)) ||
     placeIndicators.some((indicator) => lowerName.includes(indicator))
   );
+}
+
+export interface ActivityIcons {
+  icons: LucideIcon[];
+  color: string;
+}
+
+export function getActivityIcons(activityName: string, description: string): ActivityIcons {
+  const lowerName = activityName.toLowerCase();
+  const lowerDesc = description.toLowerCase();
+  const combined = lowerName + ' ' + lowerDesc;
+
+  if (combined.includes('departure') || combined.includes('depart')) {
+    const cityMatch = activityName.match(/to\s+(\w+)/i);
+    if (cityMatch) {
+      return {
+        icons: [Plane, MapPin],
+        color: 'bg-sky-100 text-sky-600',
+      };
+    }
+    return {
+      icons: [Plane],
+      color: 'bg-sky-100 text-sky-600',
+    };
+  }
+
+  if (lowerName.includes('lunch') || lowerName.includes('dinner') || lowerName.includes('breakfast')) {
+    const hasLocation = lowerName.includes(' at ') || lowerName.includes(' in ') || lowerName.includes(' near ');
+    if (hasLocation) {
+      const locationPart = lowerName.split(/\s+(?:at|in|near)\s+/)[1];
+      if (locationPart) {
+        if (locationPart.includes('market')) {
+          return {
+            icons: [Utensils, ShoppingBag],
+            color: 'bg-orange-100 text-orange-600',
+          };
+        }
+        return {
+          icons: [Utensils, MapPin],
+          color: 'bg-orange-100 text-orange-600',
+        };
+      }
+    }
+    return {
+      icons: [Utensils],
+      color: 'bg-orange-100 text-orange-600',
+    };
+  }
+
+  if (lowerName.includes('souvenirs') || lowerName.includes('souvenir')) {
+    if (lowerName.includes('relax') || lowerName.includes('last minute')) {
+      return {
+        icons: [Clock, Gift],
+        color: 'bg-fuchsia-100 text-fuchsia-600',
+      };
+    }
+    return {
+      icons: [Gift],
+      color: 'bg-fuchsia-100 text-fuchsia-600',
+    };
+  }
+
+  if (lowerName.includes('high line')) {
+    return {
+      icons: [Footprints, TreePine],
+      color: 'bg-green-100 text-green-600',
+    };
+  }
+
+  if (combined.includes('walk') && (combined.includes('park') || combined.includes('garden'))) {
+    return {
+      icons: [Footprints, TreePine],
+      color: 'bg-green-100 text-green-600',
+    };
+  }
+
+  const activityType = detectActivityType(activityName, description);
+  return {
+    icons: [getActivityIcon(activityType)],
+    color: getActivityColor(activityType),
+  };
 }
