@@ -1,6 +1,11 @@
 import { supabase } from './supabase';
 import type { Trip, Itinerary, TripFormData, DayPlan, City, DeletedTripData } from '../types';
 
+export async function getCurrentUserId(): Promise<string | null> {
+  const { data: { user } } = await supabase.auth.getUser();
+  return user?.id || null;
+}
+
 export async function createOrGetCity(cityData: {
   name: string;
   country: string;
@@ -67,9 +72,12 @@ export async function createTrip(tripData: TripFormData): Promise<Trip> {
     originCityId = originCity.id;
   }
 
+  const userId = await getCurrentUserId();
+
   const { data, error } = await supabase
     .from('trips')
     .insert({
+      user_id: userId,
       destination: tripData.destination,
       start_date: tripData.start_date,
       days: tripData.days,
@@ -347,6 +355,7 @@ export async function restoreTrip(deletedData: DeletedTripData): Promise<Trip> {
     .from('trips')
     .insert({
       id: trip.id,
+      user_id: trip.user_id,
       destination: trip.destination,
       start_date: trip.start_date,
       days: trip.days,

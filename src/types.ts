@@ -24,6 +24,7 @@ export interface TripCity {
 
 export interface Trip {
   id: string;
+  user_id?: string | null;
   destination: string;
   start_date: string;
   days: number;
